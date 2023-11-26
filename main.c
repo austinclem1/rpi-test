@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -106,6 +107,23 @@ void clearPin(GpioPin pin) {
     writePinBitNoRMW(pin, (uintptr_t)gpio_mem + GPCLR_BASE);
 }
 
+bool getPinLevel(GpioPin pin) {
+    assert(pin >= 0 && pin < PIN_COUNT);
+
+    const u32 pins_per_register = 32;
+    const u32 register_size = 4;
+    
+    const u32 register_number = pin / pins_per_register;
+    const u32 register_pin = pin % pins_per_register;
+
+    const uintptr_t reg_addr = (uintptr_t)gpio_mem + (register_number * register_size);
+    
+    volatile u32 *reg = (u32 *)reg_addr;
+    u32 mask = 1 << register_pin;
+    
+    return (*reg & mask) == 0 ? false : true;
+}
+
 void *initGpioMem() {
     void *result;
     int fd = open("/dev/gpiomem", O_RDWR);
@@ -136,14 +154,17 @@ int main(int argc, char **argv) {
 
     setPinFunction(pin2, output);
     clearPin(pin2);
+    
+    setPinFunction(pin3, input);
 
-    for (int i = 0; i < 20; i++) {
-        if (i % 2 == 1) {
+    bool done = false;
+
+    while (!done) {
+        if (getPinLevel(pin3)) {
             setPin(pin2);
         } else {
             clearPin(pin2);
         }
-        nanosleep(&sleep_time, NULL);
     }
     
     return 0;
